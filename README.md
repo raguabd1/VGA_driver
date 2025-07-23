@@ -1,0 +1,1 @@
+VGA display interfaced with zedboard using vivado IP based block design, the timing for front porch, back porch is simulated and appropriate clock constraint is given in the tool and finally the desired colour pattern is observed at the screen.
