@@ -1,94 +1,95 @@
 
+
 library IEEE;
 use IEEE.STD_LOGIC_1164.ALL;
 use IEEE.STD_LOGIC_ARITH.ALL;
 use IEEE.STD_LOGIC_UNSIGNED.ALL;
 
-entity VGA is
+-- Entity Declaration
+entity dataGen is
     Port (
-        dclk    : in  STD_LOGIC;   -- pixel clock: 25MHz
-        clr     : in  STD_LOGIC;   -- asynchronous reset
-        hsync   : out STD_LOGIC;   -- horizontal sync out
-        vsync   : out STD_LOGIC;   -- vertical sync out
-        red     : out STD_LOGIC_VECTOR(3 downto 0); -- red VGA output
-        green   : out STD_LOGIC_VECTOR(3 downto 0); -- green VGA output
-        blue    : out STD_LOGIC_VECTOR(3 downto 0)  -- blue VGA output
+        i_clk        : in  STD_LOGIC;
+        i_reset_n    : in  STD_LOGIC;
+        o_data       : out STD_LOGIC_VECTOR(23 downto 0);
+        o_data_valid : out STD_LOGIC;
+        i_data_ready : in  STD_LOGIC;
+        o_sof        : out STD_LOGIC;
+        o_eol        : out STD_LOGIC
     );
-end VGA;
+end dataGen;
 
-architecture Behavioral of VGA is
 
-    -- VGA timing parameters
-    constant hpixels : integer := 1344;  -- horizontal pixels per line
-    constant vlines  : integer := 806;  -- vertical lines per frame
-    constant hpulse  : integer := 136;   -- hsync pulse length
-    constant vpulse  : integer := 6;    -- vsync pulse length
-    constant hbp     : integer := 1343;  -- end of horizontal back porch
-    constant hfp     : integer := 1024;  -- beginning of horizontal front porch
-    constant vbp     : integer := 805;   -- end of vertical back porch
-    constant vfp     : integer := 771;  -- beginning of vertical front porch
+architecture Behavioral of dataGen is
 
-    -- Signals for counting horizontal and vertical pixels/lines
-    signal hc : integer range 0 to hpixels - 1 := 0;
-    signal vc : integer range 0 to vlines - 1 := 0;
+    -- Constants
+    constant lineSize   : integer := 1920;
+    constant frameSize  : integer := 1920 * 1080;
+
+    -- States
+    type state_type is (IDLE, SEND_DATA, END_LINE);
+    signal state        : state_type := IDLE;
+    
+    -- Signals for counters
+    signal linePixelCounter : integer range 0 to lineSize-1 := 0;
+    signal dataCounter      : integer range 0 to frameSize-1 := 0;
 
 begin
 
-    -- Process for counting horizontal and vertical pixels/lines
-    process(dclk, clr)
+    -- Process to generate the output data
+    process(i_clk, i_reset_n)
     begin
-        if clr = '1' then
-            hc <= 0;
-            vc <= 0;
-        elsif rising_edge(dclk) then
-            if hc < hpixels - 1 then
-                hc <= hc + 1;
-            else
-                hc <= 0;
-                if vc < vlines - 1 then
-                    vc <= vc + 1;
-                else
-                    vc <= 0;
-                end if;
-            end if;
+        if (i_reset_n = '0') then
+            state               <= IDLE;
+            linePixelCounter    <= 0;
+            dataCounter         <= 0;
+            o_data_valid        <= '0';
+            o_sof               <= '0';
+            o_eol               <= '0';
+        elsif rising_edge(i_clk) then
+            case state is
+                when IDLE =>
+                    o_sof <= '1';
+                    o_data_valid <= '1';
+                    state <= SEND_DATA;
+                    
+                when SEND_DATA =>
+                    if (i_data_ready = '1') then
+                        o_sof <= '0';
+                        linePixelCounter <= linePixelCounter + 1;
+                        dataCounter <= dataCounter + 1;
+                    end if;
+                    if (linePixelCounter = lineSize - 2) then
+                        o_eol <= '1';
+                        state <= END_LINE;
+                    end if;
+                    
+                when END_LINE =>
+                    if (i_data_ready = '1') then
+                        o_eol <= '0';
+                        linePixelCounter <= 0;
+                        dataCounter <= dataCounter + 1;
+                    end if;
+                    if (dataCounter = frameSize - 1) then
+                        state <= IDLE;
+                        o_data_valid <= '0';
+                        dataCounter <= 0;
+                    else
+                        state <= SEND_DATA;
+                    end if;
+            end case;
         end if;
     end process;
 
-    -- Process for setting VGA color output based on position
---    process(vc, hc)
-    process(dclk)
+    -- Assign output data based on linePixelCounter
+    process(linePixelCounter)
     begin
-     if clr = '1' then
-            red <= "0000";
-            green <= "0000";
-            blue <= "0000"; -- Black colou
---        if ((vc >= 0 and vc < vfp) and (hc >= 0 and hc < 1024 )) then
-       elsif rising_edge(dclk) then
-        if ((hc >= 0 and hc < 1024 )) then
-            if (hc >= 2 and hc < 350 ) then
-             red <= "1111";
-                green <= "0000";
-                blue <= "0000"; 
-             
-            elsif (hc >= 351 and hc < 650) then
-                red <= "0000";
-                green <= "1111";
-                blue <= "0000";   
-            elsif (hc >= 651 and hc < 1022) then
-                    red <= "0000";
-                green <= "0000";
-                blue <= "1111"; 
-            end if;
-         else
-            red <= "0000";
-            green <= "0000";
-            blue <= "0000"; -- Black colour
-        end if;
+        if (linePixelCounter >= 0 and linePixelCounter < 640) then
+            o_data <= x"0000FF";  -- Blue color
+        elsif (linePixelCounter >= 640 and linePixelCounter < 1280) then
+            o_data <= x"00FF00";  -- Green color
+        else
+            o_data <= x"FF0000";  -- Red color
         end if;
     end process;
-
-    -- Generate sync signals
-    hsync <= '0' when (hc >= 1048 and hc <(1048+ hpulse)) else '1';
-    vsync <= '0' when (vc >= 771 and vc < (771 +vpulse)) else '1';
 
 end Behavioral;
