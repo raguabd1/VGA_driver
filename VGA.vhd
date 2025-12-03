@@ -8,13 +8,13 @@ use IEEE.STD_LOGIC_UNSIGNED.ALL;
 -- Entity Declaration
 entity dataGen is
     Port (
-        i_clk        : in  STD_LOGIC;
-        i_reset_n    : in  STD_LOGIC;
-        o_data       : out STD_LOGIC_VECTOR(23 downto 0);
-        o_data_valid : out STD_LOGIC;
-        i_data_ready : in  STD_LOGIC;
-        o_sof        : out STD_LOGIC;
-        o_eol        : out STD_LOGIC
+        i_clk        : in  STD_LOGIC; --input clock signal
+        i_reset_n    : in  STD_LOGIC; --reset signal.
+        o_data       : out STD_LOGIC_VECTOR(23 downto 0); --actual output data.
+        o_data_valid : out STD_LOGIC; --output data valid
+        i_data_ready : in  STD_LOGIC; --input ready port
+        o_sof        : out STD_LOGIC; --start of frame
+        o_eol        : out STD_LOGIC --end of line
     );
 end dataGen;
 
@@ -23,7 +23,7 @@ architecture Behavioral of dataGen is
 
     -- Constants
     constant lineSize   : integer := 1920;
-    constant frameSize  : integer := 1920 * 1080;
+    constant frameSize  : integer := 1920 * 1080; --Total clock cycles
 
     -- States
     type state_type is (IDLE, SEND_DATA, END_LINE);
@@ -31,7 +31,7 @@ architecture Behavioral of dataGen is
     
     -- Signals for counters
     signal linePixelCounter : integer range 0 to lineSize-1 := 0;
-    signal dataCounter      : integer range 0 to frameSize-1 := 0;
+    signal dataCounter      : integer range 0 to frameSize-1 := 0; --for total pixels sent 
 
 begin
 
@@ -59,7 +59,7 @@ begin
                         dataCounter <= dataCounter + 1;
                     end if;
                     if (linePixelCounter = lineSize - 2) then
-                        o_eol <= '1';
+                        o_eol <= '1'; --should be 1 during lineSize-1
                         state <= END_LINE;
                     end if;
                     
