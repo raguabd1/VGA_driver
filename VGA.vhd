@@ -1,5 +1,3 @@
-
-
 library IEEE;
 use IEEE.STD_LOGIC_1164.ALL;
 use IEEE.STD_LOGIC_ARITH.ALL;
@@ -22,7 +20,8 @@ end dataGen;
 architecture Behavioral of dataGen is
 
     -- Constants
-    constant lineSize   : integer := 1920;
+    constant horSize   : integer := 1920;
+    constant verSize    : integer :=1080;
     constant frameSize  : integer := 1920 * 1080; --Total clock cycles
 
     -- States
@@ -30,62 +29,65 @@ architecture Behavioral of dataGen is
     signal state        : state_type := IDLE;
     
     -- Signals for counters
-    signal linePixelCounter : integer range 0 to lineSize-1 := 0;
-    signal dataCounter      : integer range 0 to frameSize-1 := 0; --for total pixels sent 
+    signal PixelCounter : integer range 0 to horSize-1 := 0; 
+    signal LineCounter : integer range 0 to verSize-1 :=0;
 
 begin
-
     -- Process to generate the output data
     process(i_clk, i_reset_n)
     begin
         if (i_reset_n = '0') then
             state               <= IDLE;
-            linePixelCounter    <= 0;
-            dataCounter         <= 0;
+            PixelCounter    <= 0;
+            LineCounter         <= 0;
             o_data_valid        <= '0';
             o_sof               <= '0';
             o_eol               <= '0';
         elsif rising_edge(i_clk) then
             case state is
                 when IDLE =>
-                    o_sof <= '1';
-                    o_data_valid <= '1';
-                    state <= SEND_DATA;
+                    o_data_valid <= '0';  
+     -- If slave is ready to accept data then only we should transit to send data state.  
+                    if(i_data_ready = '1') then
+                        state <= SEND_DATA;
+                        o_data_valid <= '1';
+                        o_sof <= '1';
+                    end if;
+                    
                     
                 when SEND_DATA =>
                     if (i_data_ready = '1') then
                         o_sof <= '0';
-                        linePixelCounter <= linePixelCounter + 1;
-                        dataCounter <= dataCounter + 1;
+                        PixelCounter <= PixelCounter + 1;
+                        if (PixelCounter = horSize-2) then
+                            o_eol <= '1'; --should be 1 during lineSize-1
+                            state <= END_LINE;
+                        end if;
                     end if;
-                    if (linePixelCounter = lineSize - 2) then
-                        o_eol <= '1'; --should be 1 during lineSize-1
-                        state <= END_LINE;
-                    end if;
+                    
                     
                 when END_LINE =>
                     if (i_data_ready = '1') then
                         o_eol <= '0';
-                        linePixelCounter <= 0;
-                        dataCounter <= dataCounter + 1;
-                    end if;
-                    if (dataCounter = frameSize - 1) then
-                        state <= IDLE;
-                        o_data_valid <= '0';
-                        dataCounter <= 0;
-                    else
-                        state <= SEND_DATA;
-                    end if;
+                        PixelCounter <= 0;
+                        LineCounter <= LineCounter + 1;
+                         if (LineCounter = verSize - 1) then
+                             state <= IDLE;
+                             o_data_valid <= '0';
+                             LineCounter <= 0;
+                         else state <= SEND_DATA;
+                         end if;
+                   end if;
             end case;
         end if;
     end process;
 
     -- Assign output data based on linePixelCounter
-    process(linePixelCounter)
+    process(PixelCounter)
     begin
-        if (linePixelCounter >= 0 and linePixelCounter < 640) then
+        if (PixelCounter >= 0 and PixelCounter < 640) then
             o_data <= x"0000FF";  -- Blue color
-        elsif (linePixelCounter >= 640 and linePixelCounter < 1280) then
+        elsif (PixelCounter >= 640 and PixelCounter < 1280) then
             o_data <= x"00FF00";  -- Green color
         else
             o_data <= x"FF0000";  -- Red color
@@ -93,3 +95,4 @@ begin
     end process;
 
 end Behavioral;
+
